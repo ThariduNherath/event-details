@@ -1,0 +1,213 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Bebas Neue';
+  --font-body: 'DM Sans';
+  --font-mono: 'JetBrains Mono';
+  
+  --void: #020408;
+  --ember: #FF4500;
+  --neon: #00FFB2;
+  --plasma: #7B2FFF;
+  --gold: #FFD700;
+  --ash: #1A1F2E;
+  --mist: #8892A4;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+}
+
+body {
+  background: var(--void);
+  color: #fff;
+  font-family: var(--font-body), sans-serif;
+  overflow-x: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--void);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ember);
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--ember);
+  color: #fff;
+}
+
+.font-display {
+  font-family: var(--font-display), serif;
+  letter-spacing: 0.02em;
+}
+
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+/* Noise texture overlay */
+.noise::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.03;
+}
+
+/* Glow utilities */
+.glow-ember {
+  box-shadow: 0 0 30px rgba(255, 69, 0, 0.4), 0 0 60px rgba(255, 69, 0, 0.2);
+}
+.glow-neon {
+  box-shadow: 0 0 30px rgba(0, 255, 178, 0.4), 0 0 60px rgba(0, 255, 178, 0.2);
+}
+.glow-plasma {
+  box-shadow: 0 0 30px rgba(123, 47, 255, 0.5), 0 0 60px rgba(123, 47, 255, 0.3);
+}
+.text-glow-ember {
+  text-shadow: 0 0 20px rgba(255, 69, 0, 0.8), 0 0 40px rgba(255, 69, 0, 0.4);
+}
+.text-glow-neon {
+  text-shadow: 0 0 20px rgba(0, 255, 178, 0.8), 0 0 40px rgba(0, 255, 178, 0.4);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #FF4500, #7B2FFF, #00FFB2);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-gold {
+  background: linear-gradient(135deg, #FFD700, #FF8C00);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass morphism */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-ember {
+  background: rgba(255, 69, 0, 0.06);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 69, 0, 0.2);
+}
+
+/* Animated gradient border */
+.border-animated {
+  position: relative;
+}
+.border-animated::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(135deg, #FF4500, #7B2FFF, #00FFB2, #FF4500);
+  background-size: 300% 300%;
+  border-radius: inherit;
+  z-index: -1;
+  animation: borderGlow 4s linear infinite;
+}
+@keyframes borderGlow {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Scan line effect */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Custom cursor */
+.cursor-glow {
+  cursor: none;
+}
+
+/* Ticket tear effect */
+.ticket-tear {
+  position: relative;
+}
+.ticket-tear::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 20px;
+  background: radial-gradient(circle at 10px -5px, transparent 12px, var(--void) 13px);
+  background-size: 20px 20px;
+  background-repeat: repeat-x;
+}
+
+/* Shimmer effect */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Progress bar animation */
+@keyframes progressFill {
+  from { width: 0%; }
+  to { width: var(--progress); }
+}
+
+/* Countdown flip */
+@keyframes flipIn {
+  0% { transform: rotateX(-90deg); opacity: 0; }
+  100% { transform: rotateX(0deg); opacity: 1; }
+}
+.flip-in {
+  animation: flipIn 0.3s ease-out forwards;
+}
+
+/* Section entrance */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
