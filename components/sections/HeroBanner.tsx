@@ -53,7 +53,7 @@ export default function HeroBanner() {
 
           {/* Main title */}
           <h1
-            className={`font-display text-[clamp(4rem,12vw,10rem)] leading-none tracking-wide mb-6 transition-all duration-1000 delay-200 ${
+            className={`font-display text-[clamp(4rem,12vw,7rem)] leading-none tracking-wide mb-6 transition-all duration-1000 delay-200 ${
               loaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
             }`}
           >

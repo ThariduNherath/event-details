@@ -1,17 +1,34 @@
 'use client'
-import { useState } from 'react'
-import { MapPin, Clock, Car, Train, Plane, ChevronRight, Navigation } from 'lucide-react'
 import { useReveal } from '@/lib/useReveal'
+import { useState } from 'react'
+import {
+  MapPin,
+  Clock,
+  Car,
+  Train,
+  Plane,
+  ChevronRight,
+  Navigation,
+  Building2,
+  Briefcase,
+  Mic,
+  Crown,
+  Monitor,
+  Dumbbell,
+  UtensilsCrossed,
+  ParkingCircle,
+} from 'lucide-react'
+
 
 const amenities = [
-  { label: '15 Conference Halls', icon: '🏛️' },
-  { label: '3 Expo Floors', icon: '🏢' },
-  { label: '2 Outdoor Stages', icon: '🎤' },
-  { label: 'VIP Lounges', icon: '🌟' },
-  { label: 'Media Center', icon: '📺' },
-  { label: 'Wellness Zone', icon: '🧘' },
-  { label: '4 Restaurants', icon: '🍽️' },
-  { label: 'Secure Parking', icon: '🚗' },
+  { label: '15 Conference Halls', icon: Building2, color: 'text-blue-400' },
+  { label: '3 Expo Floors', icon: Briefcase, color: 'text-indigo-400' },
+  { label: '2 Outdoor Stages', icon: Mic, color: 'text-purple-400' },
+  { label: 'VIP Lounges', icon: Crown, color: 'text-amber-400' },
+  { label: 'Media Center', icon: Monitor, color: 'text-cyan-400' },
+  { label: 'Wellness Zone', icon: Dumbbell, color: 'text-rose-400' },
+  { label: '4 Restaurants', icon: UtensilsCrossed, color: 'text-orange-400' },
+  { label: 'Secure Parking', icon: ParkingCircle, color: 'text-emerald-400' },
 ]
 
 const transport = [
@@ -120,7 +137,10 @@ export default function VenueSection() {
               <h3 className="font-display text-2xl text-white tracking-wide mb-4">GETTING THERE</h3>
               <div className="space-y-3">
                 {transport.map(({ Icon, title, desc, time }, i) => (
-                  <div key={i} className="glass border border-white/8 rounded-xl p-4 flex items-center gap-4 hover:border-neon/30 transition-colors group">
+                  <div
+                    key={i}
+                    className="glass border border-white/8 rounded-xl p-4 flex items-center gap-4 hover:border-neon/30 transition-colors group"
+                  >
                     <div className="w-10 h-10 rounded-lg bg-neon/10 border border-neon/20 flex items-center justify-center flex-shrink-0 group-hover:bg-neon/20 transition-colors">
                       <Icon className="w-5 h-5 text-neon" />
                     </div>
@@ -138,10 +158,13 @@ export default function VenueSection() {
             <div>
               <h3 className="font-display text-2xl text-white tracking-wide mb-4">VENUE AMENITIES</h3>
               <div className="grid grid-cols-2 gap-2.5">
-                {amenities.map((a, i) => (
-                  <div key={i} className="glass border border-white/8 rounded-lg px-3 py-2.5 flex items-center gap-2.5 hover:border-white/20 transition-colors">
-                    <span className="text-lg">{a.icon}</span>
-                    <span className="font-body text-sm text-mist">{a.label}</span>
+                {amenities.map(({ label, icon: Icon, color }, i) => (
+                  <div
+                    key={i}
+                    className="glass border border-white/8 rounded-lg px-3 py-2.5 flex items-center gap-2.5 hover:border-white/20 transition-colors"
+                  >
+                    <Icon className={`w-5 h-5 ${color}`} />
+                    <span className="font-body text-sm text-mist">{label}</span>
                   </div>
                 ))}
               </div>

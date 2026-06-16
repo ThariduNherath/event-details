@@ -70,10 +70,10 @@ const tiers = [
   },
 ]
 
-const colorMap: Record<string, { btn: string, border: string, text: string, bg: string }> = {
-  neon: { btn: 'bg-neon/90 hover:bg-neon text-void', border: 'border-neon/30 hover:border-neon/60', text: 'text-neon', bg: 'bg-neon/5' },
+const colorMap: Record<string, { btn: string; border: string; text: string; bg: string }> = {
+  neon:  { btn: 'bg-neon/90 hover:bg-neon text-void',          border: 'border-neon/30 hover:border-neon/60',  text: 'text-neon',  bg: 'bg-neon/5'  },
   ember: { btn: 'bg-ember hover:bg-ember/90 text-white glow-ember', border: 'border-ember/40 hover:border-ember', text: 'text-ember', bg: 'bg-ember/5' },
-  gold: { btn: 'bg-gold/90 hover:bg-gold text-void', border: 'border-gold/30 hover:border-gold/60', text: 'text-gold', bg: 'bg-gold/5' },
+  gold:  { btn: 'bg-gold/90 hover:bg-gold text-void',          border: 'border-gold/30 hover:border-gold/60',  text: 'text-gold',  bg: 'bg-gold/5'  },
 }
 
 export default function TicketSection() {
@@ -119,21 +119,30 @@ export default function TicketSection() {
             return (
               <div
                 key={tier.id}
-                className={`relative rounded-2xl transition-all duration-500 ${
+                className={`relative flex flex-col transition-all duration-500 ${
                   tier.featured ? 'scale-[1.03] z-10' : ''
                 }`}
               >
-                {/* Featured border */}
-                {tier.featured && (
-                  <div className="absolute inset-0 rounded-2xl border-animated" />
-                )}
-
-                {/* Badge */}
-                <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full font-mono text-[10px] tracking-widest ${c.text} ${c.bg} border ${c.border} whitespace-nowrap`}>
-                  {tier.badge}
+                {/* Badge: lives OUTSIDE the glass card, immediately above it */}
+                <div className="flex justify-center mb-0">
+                  <span
+                    className={`px-4 py-1 rounded-full font-mono text-[10px] tracking-widest border ${c.text} ${c.bg} ${c.border} whitespace-nowrap`}
+                  >
+                    {tier.badge}
+                  </span>
                 </div>
 
-                <div className={`glass border rounded-2xl p-6 h-full flex flex-col transition-colors duration-300 ${c.border} ${tier.featured ? 'border-opacity-60' : ''}`}>
+                {/* Featured animated border */}
+                {tier.featured && (
+                  <div className="absolute inset-0 rounded-2xl border-animated pointer-events-none" style={{ top: '1.75rem' }} />
+                )}
+
+                {/* Glass card — starts right below the badge */}
+                <div
+                  className={`glass border rounded-2xl p-6 flex-1 flex flex-col transition-colors duration-300 mt-2 ${c.border} ${
+                    tier.featured ? 'border-opacity-60' : ''
+                  }`}
+                >
                   {/* Top */}
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-4">

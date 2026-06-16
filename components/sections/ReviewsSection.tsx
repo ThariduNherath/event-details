@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Star, Quote, ChevronLeft, ChevronRight, ThumbsUp } from 'lucide-react'
 import { useReveal } from '@/lib/useReveal'
 
@@ -29,7 +29,7 @@ const reviews = [
     name: 'Marcus Webb', role: 'Venture Partner, a16z', year: 'NEXUS 2022',
     avatar: 'https://randomuser.me/api/portraits/men/41.jpg',
     rating: 5,
-    text: 'We\'ve made 4 investments directly from connections made at NEXUS. It\'s not just a conference — it\'s a deal-making machine.',
+    text: "We've made 4 investments directly from connections made at NEXUS. It's not just a conference — it's a deal-making machine.",
     tag: 'Business',
   },
   {
@@ -55,15 +55,23 @@ const stats = [
   { value: '3rd', label: 'Year running' },
 ]
 
+const CARD_WIDTH = 380
+const CARD_GAP = 20
+const STEP = CARD_WIDTH + CARD_GAP
+const INTERVAL = 3000
+const COUNT = reviews.length
+
+// Triple-clone so we never hit an edge
+const cloned = [...reviews, ...reviews, ...reviews]
+
 function ReviewCard({ review, active }: { review: typeof reviews[0]; active: boolean }) {
   return (
     <div
-      className={`relative glass border rounded-2xl p-6 transition-all duration-500 flex-shrink-0 w-full md:w-[380px] ${
-        active ? 'border-ember/30 scale-100' : 'border-white/8 scale-95 opacity-60'
+      className={`relative glass border rounded-2xl p-6 flex-shrink-0 w-[380px] transition-all duration-500 ${
+        active ? 'border-ember/30 scale-100 opacity-100' : 'border-white/8 scale-95 opacity-60'
       }`}
     >
       <Quote className="w-8 h-8 text-ember/30 mb-4" />
-
       <p className="font-body text-sm text-mist leading-relaxed mb-6">{review.text}</p>
 
       <div className="flex items-center justify-between">
@@ -78,7 +86,6 @@ function ReviewCard({ review, active }: { review: typeof reviews[0]; active: boo
             <p className="font-mono text-[10px] text-mist/60">{review.role}</p>
           </div>
         </div>
-
         <div className="text-right">
           <div className="flex gap-0.5 justify-end mb-1">
             {[...Array(review.rating)].map((_, i) => (
@@ -89,7 +96,6 @@ function ReviewCard({ review, active }: { review: typeof reviews[0]; active: boo
         </div>
       </div>
 
-      {/* Tag */}
       <div className="absolute top-4 right-4 font-mono text-[10px] text-ember/70 bg-ember/10 border border-ember/20 px-2 py-0.5 rounded-full">
         {review.tag}
       </div>
@@ -99,11 +105,98 @@ function ReviewCard({ review, active }: { review: typeof reviews[0]; active: boo
 
 export default function ReviewsSection() {
   const ref = useReveal()
-  const [activeIdx, setActiveIdx] = useState(1)
-  const [likes, setLikes] = useState<Record<number, boolean>>({})
 
-  const prev = () => setActiveIdx(i => Math.max(0, i - 1))
-  const next = () => setActiveIdx(i => Math.min(reviews.length - 1, i + 1))
+  // cloneIdx lives in the full cloned array — starts at COUNT (first real item in middle block)
+  const cloneIdxRef = useRef(COUNT)
+  const [cloneIdx, setCloneIdx] = useState(COUNT)
+  const [animated, setAnimated] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const isPausedRef = useRef(false)
+  const startTimeRef = useRef<number | null>(null)
+  const rafRef = useRef<number | null>(null)
+
+  const realIdx = ((cloneIdx % COUNT) + COUNT) % COUNT
+
+  // Apply transform directly on the track element for zero-lag control
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  const applyTransform = useCallback((idx: number, anim: boolean) => {
+    if (!trackRef.current) return
+    const containerW = trackRef.current.parentElement?.offsetWidth ?? 0
+    const offsetX = -idx * STEP + containerW / 2 - CARD_WIDTH / 2
+    trackRef.current.style.transition = anim
+      ? 'transform 500ms cubic-bezier(0.4, 0, 0.2, 1)'
+      : 'none'
+    trackRef.current.style.transform = `translateX(${offsetX}px)`
+  }, [])
+
+  const silentWrap = useCallback((idx: number) => {
+    const wrapped = idx >= COUNT * 2 ? idx - COUNT : idx <= COUNT - 1 ? idx + COUNT : idx
+    if (wrapped !== idx) {
+      setTimeout(() => {
+        cloneIdxRef.current = wrapped
+        setCloneIdx(wrapped)
+        applyTransform(wrapped, false)
+      }, 510)
+    }
+  }, [applyTransform])
+
+  const next = useCallback(() => {
+    const idx = cloneIdxRef.current + 1
+    cloneIdxRef.current = idx
+    setCloneIdx(idx)
+    applyTransform(idx, true)
+    silentWrap(idx)
+    startTimeRef.current = null
+  }, [applyTransform, silentWrap])
+
+  const prev = useCallback(() => {
+    const p = cloneIdxRef.current - 1
+    cloneIdxRef.current = p
+    setCloneIdx(p)
+    applyTransform(p, true)
+    silentWrap(p)
+    startTimeRef.current = null
+  }, [applyTransform, silentWrap])
+
+  const goToReal = useCallback((dot: number) => {
+    const target = COUNT + dot
+    cloneIdxRef.current = target
+    setCloneIdx(target)
+    applyTransform(target, true)
+    startTimeRef.current = null
+  }, [applyTransform])
+
+  const nextRef = useRef(next)
+  useEffect(() => { nextRef.current = next }, [next])
+
+  // Single rAF loop — drives both progress bar and auto-advance
+  useEffect(() => {
+    applyTransform(COUNT, false)
+
+    const onResize = () => applyTransform(cloneIdxRef.current, false)
+    window.addEventListener('resize', onResize)
+
+    const tick = (ts: number) => {
+      if (!isPausedRef.current) {
+        if (startTimeRef.current === null) startTimeRef.current = ts
+        const elapsed = ts - startTimeRef.current
+        const pct = Math.min((elapsed / INTERVAL) * 100, 100)
+        setProgress(pct)
+        if (elapsed >= INTERVAL) {
+          nextRef.current()
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      window.removeEventListener('resize', onResize)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <section id="reviews" className="relative py-24 overflow-hidden">
@@ -121,7 +214,6 @@ export default function ReviewsSection() {
             REAL <span className="gradient-text-gold">REVIEWS</span>
           </h2>
 
-          {/* Stats */}
           <div className="flex flex-wrap justify-center gap-8 mb-4">
             {stats.map(({ value, label }, i) => (
               <div key={i} className="text-center">
@@ -131,7 +223,6 @@ export default function ReviewsSection() {
             ))}
           </div>
 
-          {/* Stars row */}
           <div className="flex items-center justify-center gap-1">
             {[...Array(5)].map((_, i) => (
               <Star key={i} className="w-5 h-5 text-gold fill-gold" />
@@ -141,13 +232,14 @@ export default function ReviewsSection() {
         </div>
 
         {/* Slider */}
-        <div className="relative overflow-hidden">
-          <div
-            className="flex gap-5 transition-transform duration-500 ease-out"
-            style={{ transform: `translateX(calc(-${activeIdx * (380 + 20)}px + 50% - 190px))` }}
-          >
-            {reviews.map((review, i) => (
-              <ReviewCard key={i} review={review} active={i === activeIdx} />
+        <div
+          className="relative overflow-hidden"
+          onMouseEnter={() => { isPausedRef.current = true }}
+          onMouseLeave={() => { isPausedRef.current = false; startTimeRef.current = null }}
+        >
+          <div ref={trackRef} className="flex gap-5">
+            {cloned.map((review, i) => (
+              <ReviewCard key={i} review={review} active={i === cloneIdx} />
             ))}
           </div>
         </div>
@@ -156,8 +248,7 @@ export default function ReviewsSection() {
         <div className="flex items-center justify-center gap-4 mt-8">
           <button
             onClick={prev}
-            disabled={activeIdx === 0}
-            className="w-10 h-10 rounded-full glass border border-white/10 flex items-center justify-center text-mist hover:text-white hover:border-ember/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-10 h-10 rounded-full glass border border-white/10 flex items-center justify-center text-mist hover:text-white hover:border-ember/30 transition-all"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
@@ -165,17 +256,26 @@ export default function ReviewsSection() {
           {reviews.map((_, i) => (
             <button
               key={i}
-              onClick={() => setActiveIdx(i)}
-              className={`transition-all duration-300 rounded-full ${
-                i === activeIdx ? 'w-6 h-2 bg-ember' : 'w-2 h-2 bg-white/20 hover:bg-white/40'
-              }`}
-            />
+              onClick={() => goToReal(i)}
+              className="relative flex items-center justify-center"
+              aria-label={`Go to review ${i + 1}`}
+            >
+              {i === realIdx ? (
+                <span className="relative block w-6 h-2 rounded-full bg-white/20 overflow-hidden">
+                  <span
+                    className="absolute inset-y-0 left-0 bg-ember rounded-full"
+                    style={{ width: `${progress}%`, transition: 'none' }}
+                  />
+                </span>
+              ) : (
+                <span className="block w-2 h-2 rounded-full bg-white/20 hover:bg-white/40 transition-colors" />
+              )}
+            </button>
           ))}
 
           <button
             onClick={next}
-            disabled={activeIdx === reviews.length - 1}
-            className="w-10 h-10 rounded-full glass border border-white/10 flex items-center justify-center text-mist hover:text-white hover:border-ember/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-10 h-10 rounded-full glass border border-white/10 flex items-center justify-center text-mist hover:text-white hover:border-ember/30 transition-all"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
