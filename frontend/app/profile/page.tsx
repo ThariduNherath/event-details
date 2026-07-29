@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Loader2, User as UserIcon, Lock, CheckCircle2, ArrowLeft } from 'lucide-react'
+import { Loader2, User as UserIcon, Lock, CheckCircle2, ArrowLeft, AlertTriangle } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { api } from '@/lib/api'
 import { notify } from '@/lib/toast'
+import Swal from 'sweetalert2'
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { user, loading: authLoading, updateUser } = useAuth()
+  const { user, loading: authLoading, updateUser, deleteAccount } = useAuth()
 
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState('')
@@ -23,6 +24,8 @@ export default function ProfilePage() {
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
+
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -87,6 +90,56 @@ export default function ProfilePage() {
       notify.error(err.message || 'Could not update password')
     } finally {
       setSavingPassword(false)
+    }
+  }
+
+  const handleDeleteAccount = async () => {
+    const isLocal = user?.authProvider === 'local'
+    let password = ''
+
+    if (isLocal) {
+      const { value, isConfirmed } = await Swal.fire({
+        title: 'Delete your account?',
+        html: `
+          <p style="color:#a0a0a0;font-size:14px;margin-bottom:12px;">
+            This permanently deletes your profile, cart, and waitlist entries. This cannot be undone.
+          </p>
+        `,
+        input: 'password',
+        inputLabel: 'Enter your password to confirm',
+        inputPlaceholder: '••••••••',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Delete my account',
+        inputValidator: (val) => {
+          if (!val) return 'Password is required'
+        },
+      })
+      if (!isConfirmed) return
+      password = value
+    } else {
+      const { isConfirmed } = await Swal.fire({
+        title: 'Delete your account?',
+        text: 'This permanently deletes your profile, cart, and waitlist entries. This cannot be undone.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Delete my account',
+      })
+      if (!isConfirmed) return
+    }
+
+    setDeleting(true)
+    try {
+      await deleteAccount(password)
+      Swal.fire('Account deleted', 'Sorry to see you go.', 'success')
+      router.push('/')
+    } catch (err: any) {
+      Swal.fire('Error', err.message || 'Could not delete your account', 'error')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -178,7 +231,7 @@ export default function ProfilePage() {
         </div>
 
         {/* Password */}
-        <div className="glass border border-white/10 rounded-2xl p-6">
+        <div className="glass border border-white/10 rounded-2xl p-6 mb-6">
           <div className="flex items-center gap-2 mb-6">
             <Lock className="w-4 h-4 text-ember" />
             <h2 className="font-display text-lg text-white">
@@ -247,6 +300,26 @@ export default function ProfilePage() {
               UPDATE PASSWORD
             </button>
           </form>
+        </div>
+
+        {/* Danger zone */}
+        <div className="glass border border-red-500/20 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-4 h-4 text-red-400" />
+            <h2 className="font-display text-lg text-white">Danger zone</h2>
+          </div>
+          <p className="font-body text-xs text-mist/60 mb-5">
+            Deleting your account removes your profile, cart, and waitlist entries permanently. Your past ticket
+            orders remain on record for accounting purposes but will no longer be linked to your name.
+          </p>
+          <button
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+            className="flex items-center justify-center gap-2 px-5 py-3 font-display text-sm tracking-wide bg-red-500/10 border border-red-500/40 hover:bg-red-500/20 disabled:opacity-60 text-red-400 rounded-lg transition-all"
+          >
+            {deleting && <Loader2 className="w-4 h-4 animate-spin" />}
+            DELETE MY ACCOUNT
+          </button>
         </div>
       </div>
     </main>

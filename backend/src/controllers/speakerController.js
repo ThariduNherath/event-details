@@ -1,4 +1,5 @@
 const Speaker = require('../models/Speaker')
+const { logAction } = require('../middleware/audit')
 
 exports.getAll = async (req, res) => {
   try {
@@ -30,6 +31,8 @@ exports.create = async (req, res) => {
       order: order || 0,
     })
 
+    await logAction(req, 'speaker.create', 'Speaker', speaker._id, { name: speaker.name, tag: speaker.tag })
+
     res.status(201).json({ speaker })
   } catch (err) {
     console.error('Create speaker error:', err)
@@ -47,6 +50,9 @@ exports.update = async (req, res) => {
       runValidators: true,
     })
     if (!speaker) return res.status(404).json({ error: 'Speaker not found' })
+
+    await logAction(req, 'speaker.update', 'Speaker', speaker._id, { name: speaker.name })
+
     res.json({ speaker })
   } catch (err) {
     console.error('Update speaker error:', err)
@@ -58,6 +64,9 @@ exports.remove = async (req, res) => {
   try {
     const speaker = await Speaker.findByIdAndDelete(req.params.id)
     if (!speaker) return res.status(404).json({ error: 'Speaker not found' })
+
+    await logAction(req, 'speaker.delete', 'Speaker', speaker._id, { name: speaker.name })
+
     res.json({ success: true })
   } catch (err) {
     console.error('Delete speaker error:', err)

@@ -7,6 +7,7 @@ import { Zap, Loader2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import GoogleButton from '@/components/ui/GoogleButton'
 import { notify } from '@/lib/toast'
+import { api } from '@/lib/api'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,10 +16,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [needsVerification, setNeedsVerification] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setNeedsVerification(false)
     setLoading(true)
     try {
       await login(email, password)
@@ -26,6 +29,9 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err.message || 'Could not log in')
       notify.error(err.message || 'Could not log in')
+      if (err.message?.includes('verify')) {
+        setNeedsVerification(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -94,6 +100,23 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="font-body text-sm text-red-400">{error}</p>}
+
+          {needsVerification && (
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await api.resendVerification(email)
+                  notify.success('Verification email sent')
+                } catch (err: any) {
+                  notify.error(err.message)
+                }
+              }}
+              className="font-mono text-xs text-ember underline hover:no-underline text-left"
+            >
+              Resend verification email
+            </button>
+          )}
 
           <button
             type="submit"

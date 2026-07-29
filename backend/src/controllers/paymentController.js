@@ -1,8 +1,6 @@
 const crypto = require('crypto')
 const Booking = require('../models/Booking')
 
-// NOTE: This is a MOCK payment flow — it does not charge a real card.
-// For production, swap this out for a real processor (e.g. Stripe PaymentIntents).
 exports.checkout = async (req, res) => {
   try {
     const { cardName, cardNumber, expiry, cvv } = req.body
@@ -19,13 +17,20 @@ exports.checkout = async (req, res) => {
       return res.status(400).json({ error: 'Your cart is empty' })
     }
 
+    const isAdminOrder = req.user.role === 'admin'
     const total = cartItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0)
     const paymentRef = 'NEXUS-' + crypto.randomBytes(6).toString('hex').toUpperCase()
 
-    await Booking.updateMany(
-      { _id: { $in: cartItems.map((i) => i._id) } },
-      { $set: { status: 'paid', paymentRef } }
-    )
+    // Each booking line item gets its own unique ticket code — one code covers the whole
+    // quantity on that line (e.g. "3x Explorer" is one QR / one gate scan for the group).
+    // If you need one QR per individual ticket instead, split cart items to quantity:1 at add-to-cart time.
+    for (const item of cartItems) {
+      item.status = 'paid'
+      item.paymentRef = paymentRef
+      item.isAdminOrder = isAdminOrder
+      item.ticketCode = 'TKT-' + crypto.randomBytes(8).toString('hex').toUpperCase()
+      await item.save()
+    }
 
     res.json({
       success: true,
@@ -41,7 +46,10 @@ exports.checkout = async (req, res) => {
 
 exports.getHistory = async (req, res) => {
   try {
-    const items = await Booking.find({ userId: req.user.userId, status: 'paid' }).sort({ updatedAt: -1 })
+    const items = await Booking.find({
+      userId: req.user.userId,
+      status: { $in: ['paid', 'refunded'] },
+    }).sort({ updatedAt: -1 })
     res.json({ items })
   } catch (err) {
     console.error('Get history error:', err)

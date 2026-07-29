@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Check, Zap, Crown, Star, Shield, ChevronRight, Loader2, Bell, BellRing } from 'lucide-react'
 import { useReveal } from '@/lib/useReveal'
 import { useAuth } from '@/context/AuthContext'
+import { useCart } from '@/context/CartContext'
 import { api } from '@/lib/api'
 import { notify } from '@/lib/toast'
 import { TicketCardSkeleton } from '@/components/ui/Skeleton'
@@ -98,6 +99,7 @@ interface Availability {
 export default function TicketSection() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
+  const { refreshCart } = useCart()
   const isAdmin = user?.role === 'admin'
 
   const [selected, setSelected] = useState<string | null>(null)
@@ -141,10 +143,9 @@ export default function TicketSection() {
       await api.addToCart(tierKeyMap[tierId], qty[tierId])
       notify.success(`${tierKeyMap[tierId]} ticket added to cart`)
       setSelected(tierId)
-      setTimeout(() => {
-        setSelected(null)
-        router.push('/cart')
-      }, 900)
+      await refreshCart()
+      loadAvailability() // refresh remaining counts since a purchase just happened
+      setTimeout(() => setSelected(null), 1500)
     } catch (err: any) {
       notify.error(err.message || 'Could not add ticket to cart')
       loadAvailability() // refresh in case it just sold out from someone else's purchase
@@ -235,7 +236,7 @@ export default function TicketSection() {
                   </div>
 
                   {tier.featured && (
-                    <div className="absolute inset-0 rounded-2xl border-animated pointer-events-none" style={{ top: '1.75rem' }} />
+                    <div/>
                   )}
 
                   <div

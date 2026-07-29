@@ -8,6 +8,9 @@ const UserSchema = new mongoose.Schema({
   avatar: { type: String },
   authProvider: { type: String, enum: ['local', 'google'], default: 'local' },
   role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  emailVerified: { type: Boolean, default: false },
+  verificationToken: { type: String },
+  verificationExpires: { type: Date },
   createdAt: { type: Date, default: Date.now },
 })
 

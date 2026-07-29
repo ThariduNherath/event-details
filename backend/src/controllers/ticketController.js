@@ -1,5 +1,6 @@
 const TicketCapacity = require('../models/TicketCapacity')
 const Booking = require('../models/Booking')
+const { logAction } = require('../middleware/audit')
 
 const TIERS = ['Explorer', 'Architect', 'Visionary']
 
@@ -53,6 +54,8 @@ exports.setCapacity = async (req, res) => {
       { upsert: true, new: true, runValidators: true }
     )
 
+    await logAction(req, 'ticket.capacity.set', 'TicketCapacity', doc._id, { tier, capacity })
+
     res.json({ capacity: doc })
   } catch (err) {
     console.error('Set capacity error:', err)
@@ -64,6 +67,9 @@ exports.removeCapacity = async (req, res) => {
   try {
     const { tier } = req.params
     await TicketCapacity.findOneAndDelete({ tier })
+
+    await logAction(req, 'ticket.capacity.remove', 'TicketCapacity', null, { tier })
+
     res.json({ success: true })
   } catch (err) {
     console.error('Remove capacity error:', err)

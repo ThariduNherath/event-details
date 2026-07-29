@@ -10,6 +10,7 @@ interface User {
   avatar?: string
   role: 'user' | 'admin'
   authProvider: 'local' | 'google'
+  emailVerified: boolean
 }
 
 interface AuthContextType {
@@ -20,6 +21,7 @@ interface AuthContextType {
   loginWithGoogle: (credential: string) => Promise<void>
   logout: () => Promise<void>
   updateUser: (user: User) => void
+  deleteAccount: (password: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -67,8 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(updated)
   }
 
+  const deleteAccount = async (password: string) => {
+    await api.deleteMyAccount(password)
+    setUser(null)
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, loginWithGoogle, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, loginWithGoogle, logout, updateUser, deleteAccount }}>
       {children}
     </AuthContext.Provider>
   )

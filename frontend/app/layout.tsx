@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/context/AuthContext'
+import { CartProvider } from '@/context/CartContext'
 import { Toaster } from 'react-hot-toast'
+import VerifyBanner from '@/components/ui/VerifyBanner'
 
 export const metadata: Metadata = {
   title: 'NEXUS 2025 — The Future Awaits',
@@ -20,8 +22,11 @@ export default function RootLayout({
     <html lang="en">
       <body className="noise">
         <AuthProvider>
-          {children}
-          <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
+          <CartProvider>
+            <VerifyBanner />
+            {children}
+            <Toaster position="top-right" toastOptions={{ duration: 3500 }} />
+          </CartProvider>
         </AuthProvider>
       </body>
     </html>

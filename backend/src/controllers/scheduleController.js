@@ -1,6 +1,6 @@
 const ScheduleDay = require('../models/Schedule')
+const { logAction } = require('../middleware/audit')
 
-// GET /api/schedule — public
 exports.getAll = async (req, res) => {
   try {
     const days = await ScheduleDay.find().sort({ dayNumber: 1 })
@@ -12,7 +12,6 @@ exports.getAll = async (req, res) => {
   }
 }
 
-// POST /api/schedule/days — admin
 exports.createDay = async (req, res) => {
   try {
     const { dayNumber, theme } = req.body
@@ -24,6 +23,9 @@ exports.createDay = async (req, res) => {
       return res.status(409).json({ error: `Day ${dayNumber} already exists` })
     }
     const day = await ScheduleDay.create({ dayNumber, theme, events: [] })
+
+    await logAction(req, 'schedule.day.create', 'ScheduleDay', day._id, { dayNumber, theme })
+
     res.status(201).json({ day })
   } catch (err) {
     console.error('Create day error:', err)
@@ -31,7 +33,6 @@ exports.createDay = async (req, res) => {
   }
 }
 
-// PATCH /api/schedule/days/:id — admin
 exports.updateDay = async (req, res) => {
   try {
     const { dayNumber, theme } = req.body
@@ -41,6 +42,9 @@ exports.updateDay = async (req, res) => {
       { new: true, runValidators: true }
     )
     if (!day) return res.status(404).json({ error: 'Day not found' })
+
+    await logAction(req, 'schedule.day.update', 'ScheduleDay', day._id, { dayNumber: day.dayNumber, theme: day.theme })
+
     res.json({ day })
   } catch (err) {
     console.error('Update day error:', err)
@@ -48,11 +52,13 @@ exports.updateDay = async (req, res) => {
   }
 }
 
-// DELETE /api/schedule/days/:id — admin
 exports.deleteDay = async (req, res) => {
   try {
     const day = await ScheduleDay.findByIdAndDelete(req.params.id)
     if (!day) return res.status(404).json({ error: 'Day not found' })
+
+    await logAction(req, 'schedule.day.delete', 'ScheduleDay', day._id, { dayNumber: day.dayNumber, theme: day.theme, eventsRemoved: day.events.length })
+
     res.json({ success: true })
   } catch (err) {
     console.error('Delete day error:', err)
@@ -60,7 +66,6 @@ exports.deleteDay = async (req, res) => {
   }
 }
 
-// POST /api/schedule/days/:dayId/events — admin, add event to a day
 exports.addEvent = async (req, res) => {
   try {
     const { time, title, type, speaker, duration, tag, color, order } = req.body
@@ -81,6 +86,9 @@ exports.addEvent = async (req, res) => {
       order: order ?? day.events.length,
     })
     await day.save()
+
+    await logAction(req, 'schedule.event.create', 'ScheduleDay', day._id, { title, dayNumber: day.dayNumber })
+
     res.status(201).json({ day })
   } catch (err) {
     console.error('Add event error:', err)
@@ -88,7 +96,6 @@ exports.addEvent = async (req, res) => {
   }
 }
 
-// PATCH /api/schedule/events/:eventId — admin, update an event wherever it lives
 exports.updateEvent = async (req, res) => {
   try {
     const day = await ScheduleDay.findOne({ 'events._id': req.params.eventId })
@@ -100,6 +107,9 @@ exports.updateEvent = async (req, res) => {
     Object.assign(event, payload)
 
     await day.save()
+
+    await logAction(req, 'schedule.event.update', 'ScheduleDay', day._id, { title: event.title, eventId: req.params.eventId })
+
     res.json({ day })
   } catch (err) {
     console.error('Update event error:', err)
@@ -107,14 +117,19 @@ exports.updateEvent = async (req, res) => {
   }
 }
 
-// DELETE /api/schedule/events/:eventId — admin
 exports.deleteEvent = async (req, res) => {
   try {
     const day = await ScheduleDay.findOne({ 'events._id': req.params.eventId })
     if (!day) return res.status(404).json({ error: 'Event not found' })
 
+    const event = day.events.id(req.params.eventId)
+    const eventTitle = event?.title
+
     day.events.pull({ _id: req.params.eventId })
     await day.save()
+
+    await logAction(req, 'schedule.event.delete', 'ScheduleDay', day._id, { title: eventTitle, eventId: req.params.eventId })
+
     res.json({ day })
   } catch (err) {
     console.error('Delete event error:', err)

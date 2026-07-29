@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Loader2, DollarSign, Ticket, Users, ShoppingBag, TrendingUp,
-  Plus, Pencil, Trash2, X, ArrowLeft, Calendar, CalendarPlus, Download, Save, Search,
+  Plus, Pencil, Trash2, X, ArrowLeft, Calendar, CalendarPlus, Download, Save, Search, RotateCcw, FileClock, UserX,
+  ScanLine, CheckCircle2, XCircle,
 } from 'lucide-react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -16,7 +17,7 @@ import { notify } from '@/lib/toast'
 import Swal from 'sweetalert2'
 import { StatCardSkeleton } from '@/components/ui/Skeleton'
 
-type AdminTab = 'overview' | 'orders' | 'users' | 'speakers' | 'schedule' | 'tickets' | 'waitlist'
+type AdminTab = 'overview' | 'orders' | 'users' | 'speakers' | 'schedule' | 'tickets' | 'waitlist' | 'audit' | 'scan'
 
 interface Stats {
   totalRevenue: number
@@ -24,6 +25,7 @@ interface Stats {
   totalOrders: number
   totalUsers: number
   newUsersThisWeek: number
+  totalRefunded: number
   byTier: { tier: string; quantity: number; revenue: number }[]
   dailySales: { date: string; revenue: number; tickets: number; orders: number }[]
   revenueTrend: { date: string; revenue: number }[]
@@ -47,6 +49,7 @@ interface AdminOrder {
   paymentRef: string
   updatedAt: string
   isAdminOrder?: boolean
+  status: string
 }
 
 interface Speaker {
@@ -97,6 +100,17 @@ interface WaitlistEntry {
   createdAt: string
 }
 
+interface AuditLogEntry {
+  _id: string
+  adminName: string
+  adminEmail: string
+  action: string
+  targetType: string
+  targetId?: string
+  details: Record<string, any>
+  createdAt: string
+}
+
 const tierColor: Record<string, string> = {
   Explorer: 'text-neon',
   Architect: 'text-ember',
@@ -131,35 +145,36 @@ export default function AdminDashboard() {
   const [capacityInputs, setCapacityInputs] = useState<Record<string, string>>({})
   const [savingCapacity, setSavingCapacity] = useState<Record<string, boolean>>({})
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
+  const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Search/filter state
   const [orderSearch, setOrderSearch] = useState('')
   const [userSearch, setUserSearch] = useState('')
   const [waitlistSearch, setWaitlistSearch] = useState('')
 
-  // Speaker form state
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(emptySpeakerForm)
   const [saving, setSaving] = useState(false)
   const [formError, setFormError] = useState('')
 
-  // Schedule day form state
   const [showDayForm, setShowDayForm] = useState(false)
   const [editingDayId, setEditingDayId] = useState<string | null>(null)
   const [dayForm, setDayForm] = useState({ dayNumber: 1, theme: '' })
   const [dayFormError, setDayFormError] = useState('')
   const [savingDay, setSavingDay] = useState(false)
 
-  // Schedule event form state
   const [showEventForm, setShowEventForm] = useState(false)
   const [eventDayId, setEventDayId] = useState<string | null>(null)
   const [editingEventId, setEditingEventId] = useState<string | null>(null)
   const [eventForm, setEventForm] = useState(emptyEventForm)
   const [eventFormError, setEventFormError] = useState('')
   const [savingEvent, setSavingEvent] = useState(false)
+
+  const [scanCode, setScanCode] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<any>(null)
 
   useEffect(() => {
     if (!authLoading && (!user || user.role !== 'admin')) {
@@ -169,7 +184,7 @@ export default function AdminDashboard() {
 
   const loadAll = async () => {
     try {
-      const [s, o, u, sp, sc, av, wl] = await Promise.all([
+      const [s, o, u, sp, sc, av, wl, al] = await Promise.all([
         api.getAdminStats(),
         api.getAdminOrders(),
         api.getAdminUsers(),
@@ -177,6 +192,7 @@ export default function AdminDashboard() {
         api.getSchedule(),
         api.getAvailability(),
         api.getAdminWaitlist(),
+        api.getAuditLog(),
       ])
       setStats(s)
       setOrders(o.orders)
@@ -188,6 +204,7 @@ export default function AdminDashboard() {
       av.availability.forEach((a: Availability) => { inputs[a.tier] = a.capacity === null ? '' : String(a.capacity) })
       setCapacityInputs(inputs)
       setWaitlist(wl.entries)
+      setAuditLog(al.logs)
     } catch (err: any) {
       setError(err.message || 'Could not load dashboard data')
     } finally {
@@ -200,7 +217,6 @@ export default function AdminDashboard() {
     loadAll()
   }, [user])
 
-  // ---------- Filtered lists ----------
   const filteredOrders = orders.filter((o) => {
     const q = orderSearch.toLowerCase()
     if (!q) return true
@@ -233,7 +249,6 @@ export default function AdminDashboard() {
     )
   })
 
-  // ---------- Speaker handlers ----------
   const openAddForm = () => {
     setEditingId(null)
     setForm(emptySpeakerForm)
@@ -323,7 +338,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------- Schedule day handlers ----------
   const openAddDayForm = () => {
     setEditingDayId(null)
     setDayForm({ dayNumber: scheduleDays.length + 1, theme: '' })
@@ -387,7 +401,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------- Schedule event handlers ----------
   const openAddEventForm = (dayId: string) => {
     setEventDayId(dayId)
     setEditingEventId(null)
@@ -464,7 +477,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------- Ticket capacity handlers ----------
   const handleSaveCapacity = async (tier: string) => {
     const value = capacityInputs[tier]
     setSavingCapacity((s) => ({ ...s, [tier]: true }))
@@ -485,7 +497,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------- Waitlist handlers ----------
   const handleRemoveWaitlistEntry = async (id: string) => {
     const result = await Swal.fire({
       title: 'Remove from waitlist?',
@@ -505,7 +516,70 @@ export default function AdminDashboard() {
     }
   }
 
-  // ---------- Export handlers ----------
+  const handleRefund = async (order: AdminOrder) => {
+    const { value: reason, isConfirmed } = await Swal.fire({
+      title: `Refund ${order.tier} order?`,
+      input: 'text',
+      inputLabel: 'Reason (optional)',
+      inputPlaceholder: 'e.g. Customer requested cancellation',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Refund',
+    })
+    if (isConfirmed) {
+      try {
+        await api.refundOrder(order._id, reason || '')
+        const o = await api.getAdminOrders()
+        setOrders(o.orders)
+        Swal.fire('Refunded', 'The order has been marked as refunded.', 'success')
+      } catch (err: any) {
+        setError(err.message || 'Could not process refund')
+        Swal.fire('Error!', err.message || 'Could not process refund', 'error')
+      }
+    }
+  }
+
+  const handleDeleteUser = async (u: AdminUser) => {
+    const result = await Swal.fire({
+      title: `Delete ${u.name}'s account?`,
+      text: 'This removes their profile, cart, and waitlist entries. Their past orders stay on record. This cannot be undone.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Yes, delete account',
+    })
+    if (result.isConfirmed) {
+      try {
+        await api.deleteUser(u._id)
+        setUsers((prev) => prev.filter((x) => x._id !== u._id))
+        Swal.fire('Deleted!', 'The account has been deleted.', 'success')
+      } catch (err: any) {
+        setError(err.message || 'Could not delete user')
+        Swal.fire('Error!', err.message || 'Could not delete user', 'error')
+      }
+    }
+  }
+
+  const handleScan = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!scanCode.trim()) return
+    setScanning(true)
+    setScanResult(null)
+    try {
+      const data = await api.scanTicket(scanCode.trim())
+      setScanResult({ ...data, ok: true })
+      notify.success('Ticket valid — checked in')
+    } catch (err: any) {
+      setScanResult({ error: err.message, ok: false })
+      notify.error(err.message || 'Invalid ticket')
+    } finally {
+      setScanning(false)
+      setScanCode('')
+    }
+  }
+
   const handleExportOrders = () => {
     exportToCSV(
       'nexus-orders',
@@ -516,6 +590,7 @@ export default function AdminDashboard() {
         quantity: o.quantity,
         unit_price: o.unitPrice,
         total: o.unitPrice * o.quantity,
+        status: o.status,
         payment_ref: o.paymentRef,
         is_admin_test: o.isAdminOrder ? 'yes' : 'no',
         date: new Date(o.updatedAt).toISOString(),
@@ -584,15 +659,14 @@ export default function AdminDashboard() {
           </>
         ) : (
           <>
-            {/* Stat cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
               <StatCard icon={DollarSign} label="TOTAL REVENUE" value={`$${stats!.totalRevenue.toLocaleString()}`} color="text-neon" />
               <StatCard icon={Ticket} label="TICKETS SOLD" value={stats!.totalTicketsSold.toLocaleString()} color="text-ember" />
               <StatCard icon={ShoppingBag} label="ORDERS" value={stats!.totalOrders.toLocaleString()} color="text-gold" />
               <StatCard icon={Users} label="TOTAL USERS" value={stats!.totalUsers.toLocaleString()} color="text-white" sub={`+${stats!.newUsersThisWeek} this week`} />
+              <StatCard icon={RotateCcw} label="REFUNDED" value={`$${stats!.totalRefunded.toLocaleString()}`} color="text-red-400" />
             </div>
 
-            {/* Sales by tier */}
             <div className="glass border border-white/10 rounded-2xl p-6 mb-10">
               <div className="flex items-center gap-2 mb-5">
                 <TrendingUp className="w-4 h-4 text-neon" />
@@ -612,7 +686,6 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
               <div className="glass border border-white/10 rounded-2xl p-6">
                 <h2 className="font-display text-lg text-white mb-4">Revenue trend (14 days)</h2>
@@ -658,10 +731,9 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Tabs + export */}
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <div className="flex gap-2 flex-wrap">
-                {(['overview', 'orders', 'users', 'speakers', 'schedule', 'tickets', 'waitlist'] as const).map((t) => (
+                {(['overview', 'orders', 'users', 'speakers', 'schedule', 'tickets', 'waitlist', 'audit', 'scan'] as const).map((t) => (
                   <button
                     key={t}
                     onClick={() => setTab(t)}
@@ -694,10 +766,9 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Search bar — shown for orders/users/waitlist tabs */}
             {(tab === 'orders' || tab === 'users' || tab === 'waitlist') && (
               <div className="relative mb-6 max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-mist/50" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-mist/50 pointer-events-none" />
                 <input
                   value={tab === 'orders' ? orderSearch : tab === 'users' ? userSearch : waitlistSearch}
                   onChange={(e) => {
@@ -712,90 +783,125 @@ export default function AdminDashboard() {
                       ? 'Search by name, email, role or provider...'
                       : 'Search by name, email or tier...'
                   }
-                  className="input pl-9"
+                  className="search-input"
                 />
               </div>
             )}
 
             {tab === 'orders' && (
               <div className="glass border border-white/10 rounded-2xl overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <Th>Buyer</Th>
-                      <Th>Tier</Th>
-                      <Th>Qty</Th>
-                      <Th>Total</Th>
-                      <Th>Ref</Th>
-                      <Th>Date</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOrders.length === 0 && (
-                      <tr><td colSpan={6} className="px-4 py-6 text-center font-body text-sm text-mist/60">
-                        {orders.length === 0 ? 'No orders yet' : 'No orders match your search'}
-                      </td></tr>
-                    )}
-                    {filteredOrders.map((o) => (
-                      <tr key={o._id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                        <Td>
-                          <p className="text-white flex items-center gap-1.5">
-                            {o.userId?.name || '—'}
-                            {o.isAdminOrder && (
-                              <span className="font-mono text-[8px] text-gold border border-gold/40 bg-gold/5 px-1.5 py-0.5 rounded-full">
-                                TEST
-                              </span>
-                            )}
-                          </p>
-                          <p className="text-mist/60 text-xs">{o.userId?.email || '—'}</p>
-                        </Td>
-                        <Td><span className={tierColor[o.tier] || 'text-white'}>{o.tier}</span></Td>
-                        <Td>{o.quantity}</Td>
-                        <Td>${(o.unitPrice * o.quantity).toLocaleString()}</Td>
-                        <Td className="font-mono text-xs text-mist">{o.paymentRef}</Td>
-                        <Td className="text-mist/60 text-xs">{new Date(o.updatedAt).toLocaleDateString()}</Td>
+                <div className="table-scroll">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <Th>Buyer</Th>
+                        <Th>Tier</Th>
+                        <Th>Qty</Th>
+                        <Th>Total</Th>
+                        <Th>Status</Th>
+                        <Th>Ref</Th>
+                        <Th>Date</Th>
+                        <Th>Refund</Th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredOrders.length === 0 && (
+                        <tr><td colSpan={8} className="px-4 py-6 text-center font-body text-sm text-mist/60">
+                          {orders.length === 0 ? 'No orders yet' : 'No orders match your search'}
+                        </td></tr>
+                      )}
+                      {filteredOrders.map((o) => (
+                        <tr key={o._id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                          <Td>
+                            <p className="text-white flex items-center gap-1.5">
+                              {o.userId?.name || '—'}
+                              {o.isAdminOrder && (
+                                <span className="font-mono text-[8px] text-gold border border-gold/40 bg-gold/5 px-1.5 py-0.5 rounded-full">
+                                  TEST
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-mist/60 text-xs">{o.userId?.email || '—'}</p>
+                          </Td>
+                          <Td><span className={tierColor[o.tier] || 'text-white'}>{o.tier}</span></Td>
+                          <Td>{o.quantity}</Td>
+                          <Td>${(o.unitPrice * o.quantity).toLocaleString()}</Td>
+                          <Td>
+                            <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full border ${
+                              o.status === 'refunded' ? 'text-red-400 border-red-400/40 bg-red-400/5' : 'text-neon border-neon/40 bg-neon/5'
+                            }`}>
+                              {o.status.toUpperCase()}
+                            </span>
+                          </Td>
+                          <Td className="font-mono text-xs text-mist">{o.paymentRef}</Td>
+                          <Td className="text-mist/60 text-xs">{new Date(o.updatedAt).toLocaleDateString()}</Td>
+                          <Td>
+                            {o.status === 'paid' && !o.isAdminOrder && (
+                              <button
+                                onClick={() => handleRefund(o)}
+                                className="flex items-center gap-1 px-2 py-1 rounded text-mist hover:text-red-400 text-[10px] font-mono transition-colors border border-white/10"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                REFUND
+                              </button>
+                            )}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
             {tab === 'users' && (
               <div className="glass border border-white/10 rounded-2xl overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <Th>Name</Th>
-                      <Th>Email</Th>
-                      <Th>Provider</Th>
-                      <Th>Role</Th>
-                      <Th>Joined</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredUsers.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-6 text-center font-body text-sm text-mist/60">
-                        {users.length === 0 ? 'No users yet' : 'No users match your search'}
-                      </td></tr>
-                    )}
-                    {filteredUsers.map((u) => (
-                      <tr key={u._id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                        <Td className="text-white">{u.name}</Td>
-                        <Td>{u.email}</Td>
-                        <Td className="capitalize">{u.authProvider}</Td>
-                        <Td>
-                          <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full border ${
-                            u.role === 'admin' ? 'text-gold border-gold/40 bg-gold/5' : 'text-mist border-white/10'
-                          }`}>
-                            {u.role.toUpperCase()}
-                          </span>
-                        </Td>
-                        <Td className="text-mist/60 text-xs">{new Date(u.createdAt).toLocaleDateString()}</Td>
+                <div className="table-scroll">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <Th>Name</Th>
+                        <Th>Email</Th>
+                        <Th>Provider</Th>
+                        <Th>Role</Th>
+                        <Th>Joined</Th>
+                        <Th>Remove</Th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredUsers.length === 0 && (
+                        <tr><td colSpan={6} className="px-4 py-6 text-center font-body text-sm text-mist/60">
+                          {users.length === 0 ? 'No users yet' : 'No users match your search'}
+                        </td></tr>
+                      )}
+                      {filteredUsers.map((u) => (
+                        <tr key={u._id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                          <Td className="text-white">{u.name}</Td>
+                          <Td>{u.email}</Td>
+                          <Td className="capitalize">{u.authProvider}</Td>
+                          <Td>
+                            <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full border ${
+                              u.role === 'admin' ? 'text-gold border-gold/40 bg-gold/5' : 'text-mist border-white/10'
+                            }`}>
+                              {u.role.toUpperCase()}
+                            </span>
+                          </Td>
+                          <Td className="text-mist/60 text-xs">{new Date(u.createdAt).toLocaleDateString()}</Td>
+                          <Td>
+                            {u._id !== user?.id && (
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                className="p-1.5 rounded text-mist hover:text-red-400 transition-colors"
+                              >
+                                <UserX className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -1008,40 +1114,137 @@ export default function AdminDashboard() {
 
             {tab === 'waitlist' && (
               <div className="glass border border-white/10 rounded-2xl overflow-hidden">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <Th>Name</Th>
-                      <Th>Email</Th>
-                      <Th>Tier</Th>
-                      <Th>Joined</Th>
-                     
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredWaitlist.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-6 text-center font-body text-sm text-mist/60">
-                        {waitlist.length === 0 ? 'No one on the waitlist yet' : 'No entries match your search'}
-                      </td></tr>
-                    )}
-                    {filteredWaitlist.map((w) => (
-                      <tr key={w._id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                        <Td className="text-white">{w.name}</Td>
-                        <Td>{w.email}</Td>
-                        <Td><span className={tierColor[w.tier] || 'text-white'}>{w.tier}</span></Td>
-                        <Td className="text-mist/60 text-xs">{new Date(w.createdAt).toLocaleDateString()}</Td>
-                        <Td>
-                          <button
-                            onClick={() => handleRemoveWaitlistEntry(w._id)}
-                            className="p-1.5 rounded text-mist hover:text-red-400 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </Td>
+                <div className="table-scroll">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <Th>Name</Th>
+                        <Th>Email</Th>
+                        <Th>Tier</Th>
+                        <Th>Joined</Th>
+                       
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredWaitlist.length === 0 && (
+                        <tr><td colSpan={5} className="px-4 py-6 text-center font-body text-sm text-mist/60">
+                          {waitlist.length === 0 ? 'No one on the waitlist yet' : 'No entries match your search'}
+                        </td></tr>
+                      )}
+                      {filteredWaitlist.map((w) => (
+                        <tr key={w._id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                          <Td className="text-white">{w.name}</Td>
+                          <Td>{w.email}</Td>
+                          <Td><span className={tierColor[w.tier] || 'text-white'}>{w.tier}</span></Td>
+                          <Td className="text-mist/60 text-xs">{new Date(w.createdAt).toLocaleDateString()}</Td>
+                          <Td>
+                            <button
+                              onClick={() => handleRemoveWaitlistEntry(w._id)}
+                              className="p-1.5 rounded text-mist hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tab === 'audit' && (
+              <div className="glass border border-white/10 rounded-2xl overflow-hidden">
+                <div className="table-scroll">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-white/10">
+                        <Th>Admin</Th>
+                        <Th>Action</Th>
+                        <Th>Details</Th>
+                        <Th>When</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLog.length === 0 && (
+                        <tr><td colSpan={4} className="px-4 py-6 text-center font-body text-sm text-mist/60">No admin activity yet</td></tr>
+                      )}
+                      {auditLog.map((log) => (
+                        <tr key={log._id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                          <Td>
+                            <p className="text-white">{log.adminName}</p>
+                            <p className="text-mist/60 text-xs">{log.adminEmail}</p>
+                          </Td>
+                          <Td>
+                            <span className="font-mono text-[10px] px-2 py-0.5 rounded-full border border-ember/40 bg-ember/5 text-ember">
+                              {log.action}
+                            </span>
+                          </Td>
+                          <Td className="text-xs">
+                            {Object.entries(log.details || {}).map(([k, v]) => (
+                              <span key={k} className="inline-block mr-2 text-mist/70">
+                                {k}: <span className="text-white">{String(v)}</span>
+                              </span>
+                            ))}
+                          </Td>
+                          <Td className="text-mist/60 text-xs">{new Date(log.createdAt).toLocaleString()}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {tab === 'scan' && (
+              <div className="max-w-md mx-auto">
+                <div className="glass border border-white/10 rounded-2xl p-8 text-center mb-6">
+                  <ScanLine className="w-10 h-10 text-ember mx-auto mb-4" />
+                  <h2 className="font-display text-xl text-white mb-1">Gate check-in</h2>
+                  <p className="font-body text-sm text-mist mb-6">Enter or scan the ticket code from the guest's QR</p>
+                  <form onSubmit={handleScan} className="flex gap-2">
+                    <input
+                      value={scanCode}
+                      onChange={(e) => setScanCode(e.target.value)}
+                      placeholder="TKT-XXXXXXXX"
+                      className="input flex-1 text-center font-mono uppercase"
+                      autoFocus
+                    />
+                    <button
+                      type="submit"
+                      disabled={scanning}
+                      className="flex items-center justify-center gap-2 px-5 py-3 font-display text-sm tracking-wide bg-ember hover:bg-ember/90 disabled:opacity-60 text-white rounded-lg transition-all glow-ember"
+                    >
+                      {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : 'CHECK'}
+                    </button>
+                  </form>
+                </div>
+                {scanResult && (
+                  <div className={`glass border rounded-2xl p-6 ${scanResult.ok ? 'border-neon/40' : 'border-red-500/40'}`}>
+                    <div className="flex items-center gap-2 mb-4">
+                      {scanResult.ok ? (
+                        <CheckCircle2 className="w-5 h-5 text-neon" />
+                      ) : (
+                        <XCircle className="w-5 h-5 text-red-400" />
+                      )}
+                      <p className={`font-display text-lg ${scanResult.ok ? 'text-neon' : 'text-red-400'}`}>
+                        {scanResult.ok ? 'Valid — Checked In' : scanResult.alreadyScanned ? 'Already Scanned' : 'Invalid Ticket'}
+                      </p>
+                    </div>
+                    {scanResult.ok || scanResult.alreadyScanned ? (
+                      <div className="font-mono text-xs text-mist space-y-1">
+                        <p>Buyer: <span className="text-white">{scanResult.buyerName}</span></p>
+                        <p>Tier: <span className={tierColor[scanResult.tier] || 'text-white'}>{scanResult.tier}</span></p>
+                        <p>Quantity: <span className="text-white">{scanResult.quantity}</span></p>
+                        {scanResult.scannedAt && (
+                          <p>Scanned at: <span className="text-white">{new Date(scanResult.scannedAt).toLocaleString()}</span></p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="font-body text-sm text-mist">{scanResult.error}</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1050,7 +1253,8 @@ export default function AdminDashboard() {
                 <p className="font-body text-sm text-mist">
                   Pick <span className="text-white">ORDERS</span>, <span className="text-white">USERS</span>,{' '}
                   <span className="text-white">SPEAKERS</span>, <span className="text-white">SCHEDULE</span>,{' '}
-                  <span className="text-white">TICKETS</span> or <span className="text-white">WAITLIST</span> above for the full tables.
+                  <span className="text-white">TICKETS</span>, <span className="text-white">WAITLIST</span>,{' '}
+                  <span className="text-white">AUDIT</span> or <span className="text-white">SCAN</span> above for the full tables.
                 </p>
               </div>
             )}
@@ -1058,7 +1262,6 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Speaker add/edit modal */}
       {showForm && (
         <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center px-6 py-10 overflow-y-auto">
           <div className="w-full max-w-lg glass border border-white/10 rounded-2xl p-6 relative">
@@ -1186,7 +1389,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Schedule day add/edit modal */}
       {showDayForm && (
         <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center px-6 py-10 overflow-y-auto">
           <div className="w-full max-w-sm glass border border-white/10 rounded-2xl p-6 relative">
@@ -1227,7 +1429,6 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Schedule event add/edit modal */}
       {showEventForm && (
         <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center px-6 py-10 overflow-y-auto">
           <div className="w-full max-w-lg glass border border-white/10 rounded-2xl p-6 relative">
@@ -1307,6 +1508,43 @@ export default function AdminDashboard() {
         .input:focus {
           outline: none;
           border-color: rgba(255, 107, 53, 0.6);
+        }
+        .search-input {
+          width: 100%;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 0.375rem;
+          padding: 0.6rem 0.85rem 0.6rem 2.25rem;
+          color: white;
+          font-family: var(--font-body);
+          font-size: 0.875rem;
+        }
+        .search-input:focus {
+          outline: none;
+          border-color: rgba(255, 107, 53, 0.6);
+        }
+        .table-scroll {
+          max-height: 480px;
+          overflow-y: auto;
+        }
+        .table-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+        .table-scroll::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .table-scroll::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 4px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.25);
+        }
+        .table-scroll thead th {
+          position: sticky;
+          top: 0;
+          background: #0a0a0a;
+          z-index: 10;
         }
       `}</style>
     </main>

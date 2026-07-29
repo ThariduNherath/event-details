@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Trash2, Loader2, CheckCircle2, Minus, Plus } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useCart } from '@/context/CartContext'
 import { api } from '@/lib/api'
 import { notify } from '@/lib/toast'
 import { CartItemSkeleton } from '@/components/ui/Skeleton'
@@ -18,6 +19,7 @@ interface CartItem {
 export default function CartPage() {
   const router = useRouter()
   const { user, loading: authLoading } = useAuth()
+  const { refreshCart } = useCart()
 
   const [items, setItems] = useState<CartItem[]>([])
   const [total, setTotal] = useState(0)
@@ -57,12 +59,14 @@ export default function CartPage() {
     if (quantity < 1) return
     await api.updateCartItem(id, quantity)
     loadCart()
+    refreshCart()
   }
 
   const removeItem = async (id: string) => {
     await api.removeFromCart(id)
     notify.info('Item removed from cart')
     loadCart()
+    refreshCart()
   }
 
   const handlePay = async (e: React.FormEvent) => {
@@ -72,6 +76,7 @@ export default function CartPage() {
       const data = await api.checkout(cardName, cardNumber, expiry, cvv)
       setReceipt(data)
       notify.success('Payment confirmed — tickets booked!')
+      refreshCart()
     } catch (err: any) {
       notify.error(err.message || 'Payment could not be processed')
     } finally {

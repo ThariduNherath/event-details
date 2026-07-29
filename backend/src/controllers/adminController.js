@@ -1,15 +1,18 @@
 const User = require('../models/User')
 const Booking = require('../models/Booking')
+const { logAction } = require('../middleware/audit')
 
 exports.getStats = async (req, res) => {
   try {
-    // Real revenue/stats exclude admin test purchases
     const paidOrders = await Booking.find({ status: 'paid', isAdminOrder: { $ne: true } }).sort({ updatedAt: 1 })
 
     const totalRevenue = paidOrders.reduce((sum, o) => sum + o.unitPrice * o.quantity, 0)
     const totalTicketsSold = paidOrders.reduce((sum, o) => sum + o.quantity, 0)
     const totalOrders = paidOrders.length
     const totalUsers = await User.countDocuments()
+
+    const refundedOrders = await Booking.find({ status: 'refunded', isAdminOrder: { $ne: true } })
+    const totalRefunded = refundedOrders.reduce((sum, o) => sum + o.unitPrice * o.quantity, 0)
 
     const byTier = {}
     for (const o of paidOrders) {
@@ -51,6 +54,7 @@ exports.getStats = async (req, res) => {
       totalOrders,
       totalUsers,
       newUsersThisWeek,
+      totalRefunded,
       byTier: Object.values(byTier),
       dailySales,
       revenueTrend,
@@ -71,10 +75,10 @@ exports.getUsers = async (req, res) => {
   }
 }
 
-// Orders table shows EVERYTHING including admin test orders — but tagged, for transparency
+// Orders table shows both paid and refunded, so admins can see the full picture
 exports.getOrders = async (req, res) => {
   try {
-    const orders = await Booking.find({ status: 'paid' })
+    const orders = await Booking.find({ status: { $in: ['paid', 'refunded'] } })
       .populate('userId', 'name email')
       .sort({ updatedAt: -1 })
       .limit(200)
@@ -82,5 +86,55 @@ exports.getOrders = async (req, res) => {
   } catch (err) {
     console.error('Admin orders error:', err)
     res.status(500).json({ error: 'Could not load orders' })
+  }
+}
+
+// POST /api/admin/orders/:id/refund — admin only
+exports.refundOrder = async (req, res) => {
+  try {
+    const { reason } = req.body
+    const order = await Booking.findById(req.params.id)
+
+    if (!order) return res.status(404).json({ error: 'Order not found' })
+    if (order.status !== 'paid') {
+      return res.status(400).json({ error: 'Only paid orders can be refunded' })
+    }
+
+    order.status = 'refunded'
+    order.refundReason = reason || 'No reason provided'
+    order.refundedAt = new Date()
+    await order.save()
+
+    res.json({ order })
+  } catch (err) {
+    console.error('Refund order error:', err)
+    res.status(500).json({ error: 'Could not process refund' })
+  }
+}
+
+// DELETE /api/admin/users/:id — admin only
+exports.deleteUser = async (req, res) => {
+  try {
+    const targetId = req.params.id
+
+    if (targetId === req.user.userId) {
+      return res.status(400).json({ error: "You can't delete your own account from here — use your profile page instead" })
+    }
+
+    const target = await User.findById(targetId)
+    if (!target) return res.status(404).json({ error: 'User not found' })
+
+    // Clean up their cart and waitlist entries; keep paid/refunded orders for historical/revenue records
+    await Booking.deleteMany({ userId: targetId, status: 'cart' })
+    const Waitlist = require('../models/Waitlist')
+    await Waitlist.deleteMany({ userId: targetId })
+    await User.findByIdAndDelete(targetId)
+
+    await logAction(req, 'user.delete', 'User', targetId, { name: target.name, email: target.email, role: target.role })
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('Delete user error:', err)
+    res.status(500).json({ error: 'Could not delete user' })
   }
 }
