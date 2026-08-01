@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: nexus-mongo
+    restart: unless-stopped
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: nexus-backend
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - '5000:5000'
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/nexus2025
+      JWT_SECRET: ${JWT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      EMAIL_USER: ${EMAIL_USER}
+      EMAIL_PASS: ${EMAIL_PASS}
+      FRONTEND_URL: http://localhost:3000
+      NODE_ENV: production
+      PORT: 5000
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:5000
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    container_name: nexus-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '3000:3000'
+
+volumes:
+  mongo-data:
