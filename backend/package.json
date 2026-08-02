@@ -10,7 +10,7 @@
     "seed:schedule": "node seed-schedule.js",
     "lint": "eslint src --ext .js",
     "format": "prettier --write \"src/**/*.js\"",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand --forceExit"
   },
   "keywords": [],
   "author": "",
