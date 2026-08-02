@@ -4,7 +4,7 @@ const crypto = require('crypto')
 const { OAuth2Client } = require('google-auth-library')
 const User = require('../models/User')
 const RefreshToken = require('../models/RefreshToken')
-const { sendVerificationEmail } = require('../lib/mailer')
+const { sendVerificationEmail, sendWelcomeEmail } = require('../lib/mailer') // Fixed Duplicate Import
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
@@ -98,9 +98,12 @@ exports.signup = async (req, res) => {
       verificationExpires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
     })
 
-    // Don't let an email provider outage block signup — log and continue either way
+    // Send emails inside try block before/along with response
     sendVerificationEmail(user.email, user.name, verificationToken).catch((err) =>
       console.error('Could not send verification email:', err)
+    )
+    sendWelcomeEmail(user.email, user.name).catch((err) =>
+      console.error('Could not send welcome email:', err)
     )
 
     await setAuthCookies(res, user, req.headers['user-agent'])
@@ -132,8 +135,6 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' })
     }
 
-    // Google accounts skip verification entirely (Google already confirmed the email).
-    // Local accounts must have clicked the link before they can log in.
     if (user.authProvider === 'local' && !user.emailVerified) {
       return res.status(403).json({ error: 'Please verify your email before logging in', needsVerification: true })
     }
@@ -189,7 +190,7 @@ exports.googleAuth = async (req, res) => {
         googleId,
         avatar: picture,
         authProvider: 'google',
-        emailVerified: true, // Google already verified this email for us
+        emailVerified: true,
       })
     } else if (!user.googleId) {
       user.googleId = googleId
@@ -206,7 +207,6 @@ exports.googleAuth = async (req, res) => {
   }
 }
 
-// GET /api/auth/verify-email/:token
 exports.verifyEmail = async (req, res) => {
   try {
     const { token } = req.params
@@ -232,14 +232,12 @@ exports.verifyEmail = async (req, res) => {
   }
 }
 
-// POST /api/auth/resend-verification
 exports.resendVerification = async (req, res) => {
   try {
     const { email } = req.body
     if (!email) return res.status(400).json({ error: 'Email is required' })
 
     const user = await User.findOne({ email: email.toLowerCase() })
-    // Don't reveal whether the email exists — always respond the same way
     if (!user || user.emailVerified || user.authProvider !== 'local') {
       return res.json({ success: true })
     }
