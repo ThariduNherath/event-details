@@ -4,7 +4,7 @@ const crypto = require('crypto')
 const { OAuth2Client } = require('google-auth-library')
 const User = require('../models/User')
 const RefreshToken = require('../models/RefreshToken')
-const { sendVerificationEmail, sendWelcomeEmail } = require('../lib/mailer') // Fixed Duplicate Import
+const { sendVerificationEmail, sendWelcomeEmail, sendAdminNewUserAlert } = require('../lib/mailer')
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID)
 
@@ -98,12 +98,15 @@ exports.signup = async (req, res) => {
       verificationExpires: new Date(Date.now() + VERIFICATION_TOKEN_TTL_MS),
     })
 
-    // Send emails inside try block before/along with response
+    // Send emails (User Verification, User Welcome, Admin Alert)
     sendVerificationEmail(user.email, user.name, verificationToken).catch((err) =>
       console.error('Could not send verification email:', err)
     )
     sendWelcomeEmail(user.email, user.name).catch((err) =>
       console.error('Could not send welcome email:', err)
+    )
+    sendAdminNewUserAlert(user).catch((err) =>
+      console.error('Could not send admin new user alert:', err)
     )
 
     await setAuthCookies(res, user, req.headers['user-agent'])
@@ -192,6 +195,14 @@ exports.googleAuth = async (req, res) => {
         authProvider: 'google',
         emailVerified: true,
       })
+
+      // Send Admin Alert & Welcome email for brand new Google Users
+      sendWelcomeEmail(user.email, user.name).catch((err) =>
+        console.error('Could not send welcome email:', err)
+      )
+      sendAdminNewUserAlert(user).catch((err) =>
+        console.error('Could not send admin alert email:', err)
+      )
     } else if (!user.googleId) {
       user.googleId = googleId
       user.avatar = user.avatar || picture

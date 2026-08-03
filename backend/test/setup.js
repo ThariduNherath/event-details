@@ -1,13 +1,14 @@
 const { MongoMemoryServer } = require('mongodb-memory-server')
 const mongoose = require('mongoose')
 
-// Never let tests try to actually send email over SMTP — no real credentials exist in
-// CI, and fire-and-forget email promises resolving after a test finishes cause noisy
-// "Cannot log after tests are done" warnings. Mocking here applies for every test file
-// that loads this setup file.
+// Never let tests try to actually send email over SMTP. Every function exported by
+// lib/mailer.js must be listed here — if a new email type is added to mailer.js and
+// not added here, calling it in a controller throws "X is not a function" during tests
+// (that's exactly what happened with sendAdminNewUserAlert).
 jest.mock('../src/lib/mailer', () => ({
   sendVerificationEmail: jest.fn().mockResolvedValue(true),
   sendWelcomeEmail: jest.fn().mockResolvedValue(true),
+  sendAdminNewUserAlert: jest.fn().mockResolvedValue(true),
   sendOrderConfirmationEmail: jest.fn().mockResolvedValue(true),
   sendReminderEmail: jest.fn().mockResolvedValue(true),
 }))

@@ -49,8 +49,6 @@ async function sendVerificationEmail(to, name, token) {
   })
 }
 
-// Sent right after signup (fires alongside the verification email, separate message so
-// the verify CTA doesn't get lost among welcome copy)
 async function sendWelcomeEmail(to, name) {
   await transporter.sendMail({
     from: `"NEXUS 2025" <${process.env.EMAIL_USER}>`,
@@ -74,7 +72,27 @@ async function sendWelcomeEmail(to, name) {
   })
 }
 
-// Sent after a successful checkout
+// 🚨 Admin alert email when a new user signs up
+async function sendAdminNewUserAlert(user) {
+  await transporter.sendMail({
+    from: `"NEXUS 2025 System" <${process.env.EMAIL_USER}>`,
+    to: process.env.EMAIL_USER, // Admin Email
+    subject: `🚨 New User Alert: ${user.name}`,
+    html: EMAIL_WRAPPER(`
+      <p style="color: #FF4500; font-size: 16px; font-weight: bold;">New User Registration!</p>
+      <p style="color: #e0e0e0; font-size: 14px; line-height: 1.6;">
+        A new account has just been created on NEXUS 2025:
+      </p>
+      <div style="background: #181818; padding: 15px; border-radius: 6px; margin: 15px 0;">
+        <p style="color: #ccc; font-size: 13px; margin: 4px 0;"><strong>Name:</strong> ${user.name}</p>
+        <p style="color: #ccc; font-size: 13px; margin: 4px 0;"><strong>Email:</strong> ${user.email}</p>
+        <p style="color: #ccc; font-size: 13px; margin: 4px 0;"><strong>Provider:</strong> ${user.authProvider || 'local'}</p>
+        <p style="color: #ccc; font-size: 13px; margin: 4px 0;"><strong>Joined:</strong> ${new Date().toLocaleString()}</p>
+      </div>
+    `),
+  })
+}
+
 async function sendOrderConfirmationEmail(to, name, order) {
   const itemsHtml = order.items
     .map(
@@ -115,7 +133,6 @@ async function sendOrderConfirmationEmail(to, name, order) {
   })
 }
 
-// Sent by the daily reminder cron job to everyone with a paid ticket, N days before the event
 async function sendReminderEmail(to, name, daysLeft, eventDate) {
   await transporter.sendMail({
     from: `"NEXUS 2025" <${process.env.EMAIL_USER}>`,
@@ -142,6 +159,7 @@ async function sendReminderEmail(to, name, daysLeft, eventDate) {
 module.exports = {
   sendVerificationEmail,
   sendWelcomeEmail,
+  sendAdminNewUserAlert,
   sendOrderConfirmationEmail,
   sendReminderEmail,
-}
+} 
